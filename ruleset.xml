@@ -5,7 +5,9 @@
  <exclude-pattern>\.git</exclude-pattern>
 
  <rule ref="PSR2"/>
-
+ <rule ref="Generic.Files.LineLength">
+  <exclude-pattern>*</exclude-pattern>
+ </rule>
  <!--
  Temporarily ignore until API docblock formatting and line length issues in core code are fixed.
  -->
@@ -60,8 +62,8 @@
 
  <!-- Relax some install.php and tests/* rules -->
  <!--
- <rule ref="PSR1.Files.SideEffects">
-  <exclude-pattern>install.php</exclude-pattern>
+ <rule ref="Generic.Files.LineLength">
+  <exclude-pattern>*</exclude-pattern>
  </rule>
 -->
 </ruleset>

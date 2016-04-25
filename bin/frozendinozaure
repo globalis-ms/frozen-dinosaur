@@ -1,0 +1,43 @@
+#!/usr/bin/env php
+<?php
+
+use FrozenDinosaur\Console\Application;
+use FrozenDinosaur\Console\Command\GenerateCommand;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
+
+
+$include_flag =false;
+
+foreach (array(__DIR__ . '/../../autoload.php', __DIR__ . '/../vendor/autoload.php', __DIR__ . '/vendor/autoload.php') as $file) {
+    if (file_exists($file)) {
+        include $file;
+        $include_flag = true;
+        break;
+    }
+}
+
+if (!$include_flag) {
+    fwrite(STDERR,
+        'You need to set up the project dependencies using the following commands:' . PHP_EOL .
+        'wget http://getcomposer.org/composer.phar' . PHP_EOL .
+        'php composer.phar install' . PHP_EOL
+    );
+    die(1);
+}
+
+// Create temp dir
+/*$tempDir = sys_get_temp_dir() . '/_apigen';
+if (function_exists("posix_getuid")) {
+	$tempDir .= posix_getuid();
+}
+$fileSystem = new ApiGen\Utils\FileSystem;
+$fileSystem->purgeDir($tempDir);*/
+
+$application = new Application();
+$application->add(new GenerateCommand());
+$application->setAutoExit(false);
+$application->run();
+
+// Remove temp data
+// $fileSystem->deleteDir($tempDir);
