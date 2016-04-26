@@ -117,27 +117,132 @@ class GenerateCommand extends Command
     }
 
     /**
-     * Scan and parse sources folders.
+     * Scan and parse sources folders
      *
-     * @param array $source     Dossiers à scanner.
-     * @param array $exclude    Dossiers à ne pas scanner.
-     * @param array $extensions Extensions des fichiers à scanner.
+     * @param array $source     Dossiers à scanner
+     * @param array $exclude    Dossiers à ne pas scanner
+     * @param array $extensions Extensions des fichiers à scanner
      * @return void
      */
     private function scanAndParse(array $source, array $exclude, array $extensions)
     {
+        $apiDocAnnotations = [
+            //First get api name
+            'apiName' => new \FrozenDinosaur\Parser\ApiDoc\ApiName(),
+            //Api informations
+            'api' => new \FrozenDinosaur\Parser\ApiDoc\Api(),
+            // 'apiDefine'        => "name [title]\n[description]",
+            'apiDescription' => new \FrozenDinosaur\Parser\ApiDoc\ApiDescription(),
+            'apiError' => new \FrozenDinosaur\Parser\ApiDoc\ApiError(),
+            // 'apiErrorExample'  => "[{type}] [title]\nexample",
+            // 'apiExample'       => "[{type}] title\nexample",
+            'apiGroup' => new \FrozenDinosaur\Parser\ApiDoc\ApiGroup(),
+            'apiHeader' => new \FrozenDinosaur\Parser\ApiDoc\ApiHeader(),
+            // 'apiHeaderExample' => "[{type}] [title]\nexample",
+            // Ignore api.
+            // 'apiIgnore' =>  "[hint]",
+            'apiParam' => new \FrozenDinosaur\Parser\ApiDoc\ApiParam(),
+            // 'apiParamExample' =>  "[{type}] [title]\nexample",
+            // "apiPermission" =>  "name",
+            // "apiSampleRequest" =>  "url",
+            "apiSuccess" => new \FrozenDinosaur\Parser\ApiDoc\ApiSuccess(),
+            // "apiSuccessExample" =>  "[{type}] [title]\nexample",
+            // "apiUse" => "name",
+            // "apiVersion" => "version",
+        ];
+
+
         $this->io->writeln('<info>Scanning sources and parsing</info>');
         $files = $this->finder()->find($source, $exclude, $extensions);
         $this->parser()->parse($files);
+
+        $extractApiData = [
+            "swagger" => "2.0",
+            "host" => "{{host}}",
+            "info"=> [
+                "version" => "1.0.0",
+                "title" => "TODO",
+            ],
+            "basePath" => "/{{basePath}}",
+            "schemes" => [
+                "http"
+            ],
+            "consumes" => [
+                "application/json"
+            ],
+            "produces" => [
+                "application/json"
+            ],
+            'paths' => [],
+        ];
+
         foreach ($this->parser()->classes() as $class) {
             foreach ($class->getOwnMethods() as $method) {
-                if ($annotations = $method->getAnnotations()) {
-                    // Parse doc block.
-                    var_dump($annotations);
+
+                //Check for api definition
+                if ($method->hasAnnotation('api')) {
+                    $toParse = $method->getAnnotation('api')[0];
+                    $parsedAnnotation = $apiDocAnnotations['api']->parse($toParse);
+                    $apiMethod = $parsedAnnotation['method'];
+                    $apiPath = $parsedAnnotation['path'];
+
+                    if (!isset($extractApiData['paths'][$apiPath])) {
+                        $extractApiData['paths'][$apiPath] = [];
+                    }
+
+                    $extractApiData['paths'][$apiPath][$apiMethod] = [];
+
+                    //ApiName
+                    if ($method->hasAnnotation('apiName')) {
+                        $tmp = $method->getAnnotation('apiName')[0];
+                        $tmp = $apiDocAnnotations['apiName']->parse($tmp);
+                        $extractApiData['paths'][$apiPath][$apiMethod]['operationId'] = $tmp['name'];
+                    }
+
+                    // Description
+                    if ($method->hasAnnotation('apiDescription')) {
+                        $extractApiData['paths'][$apiPath][$apiMethod]["description"] = '';
+                        foreach ($method->getAnnotation('apiDescription') as $parsedParam) {
+                             $parsedAnnotation = $apiDocAnnotations['apiDescription']->parse($parsedParam);
+                             $extractApiData['paths'][$apiPath][$apiMethod]["description"] .= $parsedAnnotation['text'];
+                        }
+                    }
+
+                    if ($method->hasAnnotation('apiParam')) {
+                        $parameters = [];
+                        foreach ($method->getAnnotation('apiParam') as $parsedParam) {
+                            $parsedParam = $apiDocAnnotations['apiParam']->parse($parsedParam);
+
+                            $parameters[] = [
+                                'name' => $parsedParam['name'],
+                                'type' => strtolower($parsedParam['type']),
+                                //'description' => $parsedParam['description'],
+                                "in" => ($apiMethod == 'get')? 'query' : 'body',
+                                'required' => true
+                            ];
+                        }
+                        $extractApiData['paths'][$apiPath][$apiMethod]["parameters"] = $parameters;
+                    }
+
+
+                    /*if ($method->hasAnnotation('apiSuccess')) {
+
+                        $parameters = [];
+                        foreach ($method->getAnnotation('apiSuccess') as $parsedParam) {
+                            $parsedParam = $apiDocAnnotations['apiSuccess']->parse($parsedParam);
+
+                            $parameters[] = [
+                                'name' => $parsedParam['name'],
+                                'type' => $parsedParam['type'],
+                                'description' => $parsedParam['description'],
+                            ];
+                        }
+                    }*/
                 }
             }
         }
 
+        file_put_contents('./swagger.json', json_encode($extractApiData, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT));
         /*
             API DOC ANNOATIONS:
             @api {method} path [title]
@@ -175,6 +280,5 @@ class GenerateCommand extends Command
                         $stats['functions']
                     ));
         */
-
     }
 }
