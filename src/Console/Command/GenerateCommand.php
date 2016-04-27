@@ -159,7 +159,7 @@ class GenerateCommand extends Command
         $extractApiData = [
             "swagger" => "2.0",
             "host" => "{{host}}",
-            "info"=> [
+            "info" => [
                 "version" => "1.0.0",
                 "title" => "TODO",
             ],
@@ -181,14 +181,28 @@ class GenerateCommand extends Command
 
                 //Check for api definition
                 if ($method->hasAnnotation('api')) {
+                    $properties = [];
+                    $parameters = [];
+
                     $toParse = $method->getAnnotation('api')[0];
                     $parsedAnnotation = $apiDocAnnotations['api']->parse($toParse);
                     $apiMethod = $parsedAnnotation['method'];
                     $apiPath = $parsedAnnotation['path'];
-
+                    if (preg_match_all('/\{(?<params>[^\}]+)\}/', $apiPath, $matches) && !empty($matches['params'])) {
+                        foreach ($matches['params'] as $param) {
+                            $parameters[] = [
+                                'name' => $param,
+                                'type' => 'integer', //@TODO
+                                //'description' => $parsedParam['description'],
+                                "in" => 'path',
+                                'required' => true
+                            ];
+                        }
+                    }
                     if (!isset($extractApiData['paths'][$apiPath])) {
                         $extractApiData['paths'][$apiPath] = [];
                     }
+
 
                     $extractApiData['paths'][$apiPath][$apiMethod] = [];
 
@@ -209,40 +223,210 @@ class GenerateCommand extends Command
                     }
 
                     if ($method->hasAnnotation('apiParam')) {
-                        $parameters = [];
-                        foreach ($method->getAnnotation('apiParam') as $parsedParam) {
-                            $parsedParam = $apiDocAnnotations['apiParam']->parse($parsedParam);
 
-                            $parameters[] = [
-                                'name' => $parsedParam['name'],
-                                'type' => strtolower($parsedParam['type']),
-                                //'description' => $parsedParam['description'],
-                                "in" => ($apiMethod == 'get')? 'query' : 'body',
-                                'required' => true
+                        if ($apiMethod == 'get') {
+                            foreach ($method->getAnnotation('apiParam') as $parsedParam) {
+                                $parsedParam = $apiDocAnnotations['apiParam']->parse($parsedParam);
+
+                                $param = [
+                                    'name' => $parsedParam['name'],
+                                    'type' => strtolower($parsedParam['type']),
+                                    //'description' => $parsedParam['description'],
+                                    "in" => 'query',
+                                    'required' => true
+                                ];
+                                switch ($param['type']) {
+                                    case 'decimal':
+                                    case 'float':
+                                        $param['type'] = 'number';
+                                        $param['format'] = 'float';
+                                        break;
+                                    case 'double':
+                                        $param['type'] = 'number';
+                                        $param['format'] = 'float';
+                                        break;
+                                    case 'timestamp':
+                                        $param['type'] = 'integer';
+                                        break;
+                                    case 'date':
+                                        $param['type'] = 'string';
+                                        $param['format'] = 'date';
+                                        break;
+                                    case 'datetime':
+                                        $param['type'] = 'string';
+                                        $param['format'] = 'date-time';
+                                        break;
+                                    case 'text':
+                                        $param['type'] = 'string';
+                                        break;
+                                    case 'binary':
+                                        $param['type'] = 'string';
+                                        $param['format'] = 'byte';
+                                        break;
+                                }
+                                $parameters[] = $param;
+                            }
+                        } else {
+
+                            $params = [
+                                'name' => 'body',
+                                'in' => 'body',
+                                'required' => true,
+                                'schema' => [
+                                    'type' => 'object',
+                                    'properties' => [],
+                                ],
                             ];
+                            foreach ($method->getAnnotation('apiParam') as $parsedParam) {
+                                $parsedParam = $apiDocAnnotations['apiParam']->parse($parsedParam);
+                                $param = [
+                                    'type' => strtolower($parsedParam['type']),
+                                    //'description' => $parsedParam['description'],
+                                    'required' => true
+                                ];
+                                switch ($param['type']) {
+                                    case 'decimal':
+                                    case 'float':
+                                        $param['type'] = 'number';
+                                        $param['format'] = 'float';
+                                        break;
+                                    case 'double':
+                                        $param['type'] = 'number';
+                                        $param['format'] = 'float';
+                                        break;
+                                    case 'timestamp':
+                                        $param['type'] = 'integer';
+                                        break;
+                                    case 'date':
+                                        $param['type'] = 'string';
+                                        $param['format'] = 'date';
+                                        break;
+                                    case 'datetime':
+                                        $param['type'] = 'string';
+                                        $param['format'] = 'date-time';
+                                        break;
+                                    case 'text':
+                                        $param['type'] = 'string';
+                                        break;
+                                    case 'binary':
+                                        $param['type'] = 'string';
+                                        $param['format'] = 'byte';
+                                        break;
+                                }
+                                $params['schema']['properties'][$parsedParam['name']] = $param;
+                            }
+                            $parameters[] = $params;
                         }
+                    }
+
+                    if (!empty($parameters)) {
                         $extractApiData['paths'][$apiPath][$apiMethod]["parameters"] = $parameters;
                     }
 
 
-                    /*if ($method->hasAnnotation('apiSuccess')) {
+                    $extractApiData['paths'][$apiPath][$apiMethod]["responses"] = [];
 
-                        $parameters = [];
+                    if ($method->hasAnnotation('apiSuccess')) {
                         foreach ($method->getAnnotation('apiSuccess') as $parsedParam) {
                             $parsedParam = $apiDocAnnotations['apiSuccess']->parse($parsedParam);
+                            if (empty($parsedParam['group'])) {
+                                $parsedParam['group'] = '200';
+                            }
+                            if (!isset($properties[$parsedParam['group']])) {
+                                $properties[$parsedParam['group']] = [];
+                            }
+                            if ($parsedParam['group'] == '204') {
+                                $properties[$parsedParam['group']]['description'] = 'Delete';
+                            } else {
+                                if (!empty($parsedParam['name'])) {
+                                    if (!empty($parsedParam['type'])) {
+                                        switch ($parsedParam['type']) {
+                                            case 'decimal':
+                                            case 'float':
+                                                $parsedParam['type'] = 'number';
+                                                break;
+                                            case 'double':
+                                                $parsedParam['type'] = 'number';
+                                                break;
+                                            case 'timestamp':
+                                                $parsedParam['type'] = 'integer';
+                                                break;
+                                            case 'date':
+                                                $parsedParam['type'] = 'string';
+                                                break;
+                                            case 'datetime':
+                                                $parsedParam['type'] = 'string';
+                                                break;
+                                            case 'text':
+                                                $parsedParam['type'] = 'string';
+                                                break;
+                                            case 'binary':
+                                                $parsedParam['type'] = 'string';
+                                                break;
+                                        }
+                                        $properties[$parsedParam['group']][$parsedParam['name']]['type'] = $parsedParam['type'];
+                                    }
 
-                            $parameters[] = [
-                                'name' => $parsedParam['name'],
-                                'type' => $parsedParam['type'],
-                                'description' => $parsedParam['description'],
+                                    if (!empty($parsedParam['description'])) {
+                                        $properties[$parsedParam['group']][$parsedParam['name']]['description'] = $parsedParam['description'];
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if ($method->hasAnnotation('apiError')) {
+                        foreach ($method->getAnnotation('apiError') as $parsedParam) {
+                            $parsedParam = $apiDocAnnotations['apiError']->parse($parsedParam);
+                            if (!isset($properties[$parsedParam['type']])) {
+                                $properties[$parsedParam['type']] = [];
+                            }
+                            $properties[$parsedParam['type']] = [
+                                "code" => [
+                                    "type" => "integer",
+                                ],
+                                "message" => [
+                                    "type" => "string",
+                                ],
                             ];
                         }
-                    }*/
+                    }
+
+                    foreach ($properties as $name => $fields) {
+                        if ($name != 204) {
+                            if ($apiMethod === 'get') {
+
+                            }
+                            $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name] = [
+                                //'type' => 'Response ' . $name, // @TODO get real type
+                                'schema' => [
+                                    "type" => "object",
+                                    'properties' => [],
+                                ],
+                                'description' => 'todo', //@TODO
+                            ];
+
+                            foreach ($fields as $fieldName => $field) {
+                                $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name]['schema']['properties'][$fieldName] = $field;
+                            }
+                        } else {
+                             $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name] = $fields;
+                        }
+                    }
+
+                    // Read tag
+                    if ($method->hasAnnotation('apiGroup')) {
+                        $extractApiData['paths'][$apiPath][$apiMethod]['tags'] = [];
+                        foreach ($method->getAnnotation('apiGroup') as $toParse) {
+                            $parsedAnnotation = $apiDocAnnotations['apiGroup']->parse($toParse);
+                            $extractApiData['paths'][$apiPath][$apiMethod]['tags'][] = $parsedAnnotation['name'];
+                        }
+                    }
                 }
             }
         }
 
-        file_put_contents('./swagger.json', json_encode($extractApiData, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT));
+        file_put_contents('./swagger.json', json_encode($extractApiData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
         /*
             API DOC ANNOATIONS:
             @api {method} path [title]
