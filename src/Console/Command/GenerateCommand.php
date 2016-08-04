@@ -233,7 +233,7 @@ class GenerateCommand extends Command
                                     'type' => strtolower($parsedParam['type']),
                                     //'description' => $parsedParam['description'],
                                     "in" => 'query',
-                                    'required' => true
+                                    'required' => (boolean)preg_match('/^\[.*\]$/', $parsedParam['name'])
                                 ];
                                 switch ($param['type']) {
                                     case 'decimal':
