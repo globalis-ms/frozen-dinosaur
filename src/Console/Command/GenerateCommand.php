@@ -7,6 +7,7 @@ use FrozenDinosaur\Parser\Parser;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
@@ -28,6 +29,77 @@ class GenerateCommand extends Command
     protected $parser;
 
     /**
+     * Output file name
+     * @var string
+     */
+    protected $destinationFileName;
+
+    /**
+     * Input sources
+     * @var array
+     */
+    protected $sources;
+
+    /**
+     * Api Name Parser
+     * @var \FrozenDinosaur\Parser\ApiDoc\ApiName
+     */
+    protected $parserApiName;
+
+    // protected Api informations
+
+    /**
+     * Api Parser
+     * @var \FrozenDinosaur\Parser\ApiDoc\Api
+     */
+    protected $parserApi;
+    //protected  'apiDefine'        => "name [title]\n[description]",
+
+    /**
+     * Api Description Parser
+     * @var \FrozenDinosaur\Parser\ApiDoc\ApiDescription
+     */
+    protected $parserApiDescription;
+
+    /**
+     * Api error parser
+     * @var \FrozenDinosaur\Parser\ApiDoc\ApiError
+     */
+    protected $parserApiError;
+    // protected  'apiErrorExample'  => "[{type}] [title]\nexample",
+    // protected  'apiExample'       => "[{type}] title\nexample",
+
+    /**
+     * Api Group Parser
+     * @var \FrozenDinosaur\Parser\ApiDoc\ApiGroup
+     */
+    protected $parserApiGroup;
+
+    /**
+     * Api header parser
+     * @var \FrozenDinosaur\Parser\ApiDoc\ApiHeader
+     */
+    protected $parserApiHeader;
+    //protected  'apiHeaderExample' => "[{type}] [title]\nexample",
+    //protected  Ignore api.
+    //protected  'apiIgnore' =>  "[hint]",
+    /**
+     * Api Param parser
+     * @var \FrozenDinosaur\Parser\ApiDoc\ApiParam
+     */
+    protected $parserApiParam;
+    // protected  'apiParamExample' =>  "[{type}] [title]\nexample",
+    // protected  "apiPermission" =>  "name",
+    // protected  "apiSampleRequest" =>  "url",
+
+    /**
+     * Api Success parser
+     * @var \FrozenDinosaur\Parser\ApiDoc\ApiSuccess
+     */
+    protected $parserApiSucces;
+    //protected  "apiSuccessExample" =>  "[{type}] [title]\nexample",
+
+    /**
      * Configure function.
      *
      * @return void
@@ -36,6 +108,11 @@ class GenerateCommand extends Command
     {
         $this->setName('generate')
              ->setDescription('Generate API unit tests')
+             ->addArgument(
+                 'title',
+                 InputArgument::REQUIRED,
+                 'API title.'
+             )
              ->addOption(
                  'source',
                  's',
@@ -46,7 +123,8 @@ class GenerateCommand extends Command
                  'destination',
                  'd',
                  InputOption::VALUE_REQUIRED,
-                 'Target dir for documentation.'
+                 'Target dir for documentation.',
+                 'swagger.json'
              )
              ->addOption(
                  'exclude',
@@ -61,6 +139,20 @@ class GenerateCommand extends Command
                  InputOption::VALUE_IS_ARRAY | InputOption::VALUE_REQUIRED,
                  'Scanned file extensions.',
                  ['php']
+             )
+             ->addOption(
+                 'host',
+                 null,
+                 InputOption::VALUE_OPTIONAL,
+                 'API host.',
+                 'localhost'
+             )
+             ->addOption(
+                 'base-path',
+                 null,
+                 InputOption::VALUE_OPTIONAL,
+                 'API base path.',
+                 '/'
              );
     }
 
@@ -100,11 +192,16 @@ class GenerateCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $this->io = $output;
+        $this->destinationFileName = $input->getOption('destination');
+        $this->sources = $input->getOption('source');
+        $this->initParsers();
         try {
             $this->scanAndParse(
-                $input->getOption('source'),
                 $input->getOption('exclude'),
-                $input->getOption('extensions')
+                $input->getOption('extensions'),
+                $input->getOption('host'),
+                $input->getOption('base-path'),
+                $input->getArgument('title')
             );
             // $this->generate($options);
             return 0;
@@ -117,6 +214,33 @@ class GenerateCommand extends Command
     }
 
     /**
+     * Parsers init
+     *
+     * @return void
+     */
+    protected function initParsers()
+    {
+        $this->parserApiName = new \FrozenDinosaur\Parser\ApiDoc\ApiName();
+
+        $this->parserApi = new \FrozenDinosaur\Parser\ApiDoc\Api();
+        //  'apiDefine'        = "name [title]\n[description]",
+        $this->parserApiDescription = new \FrozenDinosaur\Parser\ApiDoc\ApiDescription();
+        $this->parserApiError = new \FrozenDinosaur\Parser\ApiDoc\ApiError();
+        //   'apiErrorExample'  = "[{type}] [title]\nexample",
+        //   'apiExample'       = "[{type}] title\nexample",
+        $this->parserApiGroup = new \FrozenDinosaur\Parser\ApiDoc\ApiGroup();
+        $this->parserApiHeader = new \FrozenDinosaur\Parser\ApiDoc\ApiHeader();
+        //  'apiHeaderExample' = "[{type}] [title]\nexample",
+        //  Ignore api.
+        //  'apiIgnore' =  "[hint]",
+        $this->parserApiParam = new \FrozenDinosaur\Parser\ApiDoc\ApiParam();
+        //   'apiParamExample' =  "[{type}] [title]\nexample",
+        //   "apiPermission" =  "name",
+        //   "apiSampleRequest" =  "url",
+        $this->parserApiSuccess = new \FrozenDinosaur\Parser\ApiDoc\ApiSuccess();
+        //protected  "apiSuccessExample" =  "[{type}] [title]\nexample",
+    }
+    /**
      * Scan and parse sources folders
      *
      * @param array $source     Dossiers à scanner
@@ -124,46 +248,21 @@ class GenerateCommand extends Command
      * @param array $extensions Extensions des fichiers à scanner
      * @return void
      */
-    private function scanAndParse(array $source, array $exclude, array $extensions)
+    private function scanAndParse(array $exclude, array $extensions, $host, $base_path, $title)
     {
-        $apiDocAnnotations = [
-            //First get api name
-            'apiName' => new \FrozenDinosaur\Parser\ApiDoc\ApiName(),
-            //Api informations
-            'api' => new \FrozenDinosaur\Parser\ApiDoc\Api(),
-            // 'apiDefine'        => "name [title]\n[description]",
-            'apiDescription' => new \FrozenDinosaur\Parser\ApiDoc\ApiDescription(),
-            'apiError' => new \FrozenDinosaur\Parser\ApiDoc\ApiError(),
-            // 'apiErrorExample'  => "[{type}] [title]\nexample",
-            // 'apiExample'       => "[{type}] title\nexample",
-            'apiGroup' => new \FrozenDinosaur\Parser\ApiDoc\ApiGroup(),
-            'apiHeader' => new \FrozenDinosaur\Parser\ApiDoc\ApiHeader(),
-            // 'apiHeaderExample' => "[{type}] [title]\nexample",
-            // Ignore api.
-            // 'apiIgnore' =>  "[hint]",
-            'apiParam' => new \FrozenDinosaur\Parser\ApiDoc\ApiParam(),
-            // 'apiParamExample' =>  "[{type}] [title]\nexample",
-            // "apiPermission" =>  "name",
-            // "apiSampleRequest" =>  "url",
-            "apiSuccess" => new \FrozenDinosaur\Parser\ApiDoc\ApiSuccess(),
-            // "apiSuccessExample" =>  "[{type}] [title]\nexample",
-            // "apiUse" => "name",
-            // "apiVersion" => "version",
-        ];
-
 
         $this->io->writeln('<info>Scanning sources and parsing</info>');
-        $files = $this->finder()->find($source, $exclude, $extensions);
+        $files = $this->finder()->find($this->sources, $exclude, $extensions);
         $this->parser()->parse($files);
 
         $extractApiData = [
             "swagger" => "2.0",
-            "host" => "{{host}}",
+            "host" => $host,
             "info" => [
                 "version" => "1.0.0",
-                "title" => "TODO",
+                "title" => $title,
             ],
-            "basePath" => "/{{basePath}}",
+            "basePath" => $base_path,
             "schemes" => [
                 "http"
             ],
@@ -178,22 +277,20 @@ class GenerateCommand extends Command
 
         foreach ($this->parser()->classes() as $class) {
             foreach ($class->getOwnMethods() as $method) {
-
                 //Check for api definition
                 if ($method->hasAnnotation('api')) {
                     $properties = [];
                     $parameters = [];
 
                     $toParse = $method->getAnnotation('api')[0];
-                    $parsedAnnotation = $apiDocAnnotations['api']->parse($toParse);
+                    $parsedAnnotation = $this->parserApi->parse($toParse);
                     $apiMethod = $parsedAnnotation['method'];
                     $apiPath = $parsedAnnotation['path'];
                     if (preg_match_all('/\{(?<params>[^\}]+)\}/', $apiPath, $matches) && !empty($matches['params'])) {
                         foreach ($matches['params'] as $param) {
                             $parameters[] = [
                                 'name' => $param,
-                                'type' => 'integer', //@TODO
-                                //'description' => $parsedParam['description'],
+                                'type' => 'string',
                                 "in" => 'path',
                                 'required' => true
                             ];
@@ -209,7 +306,7 @@ class GenerateCommand extends Command
                     //ApiName
                     if ($method->hasAnnotation('apiName')) {
                         $tmp = $method->getAnnotation('apiName')[0];
-                        $tmp = $apiDocAnnotations['apiName']->parse($tmp);
+                        $tmp = $this->parserApiName->parse($tmp);
                         $extractApiData['paths'][$apiPath][$apiMethod]['operationId'] = $tmp['name'];
                     }
 
@@ -217,24 +314,27 @@ class GenerateCommand extends Command
                     if ($method->hasAnnotation('apiDescription')) {
                         $extractApiData['paths'][$apiPath][$apiMethod]["description"] = '';
                         foreach ($method->getAnnotation('apiDescription') as $parsedParam) {
-                             $parsedAnnotation = $apiDocAnnotations['apiDescription']->parse($parsedParam);
+                             $parsedAnnotation = $this->parserApiDescription->parse($parsedParam);
                              $extractApiData['paths'][$apiPath][$apiMethod]["description"] .= $parsedAnnotation['text'];
                         }
                     }
 
                     if ($method->hasAnnotation('apiParam')) {
-
+                        $requiredFields = [];
                         if ($apiMethod == 'get') {
                             foreach ($method->getAnnotation('apiParam') as $parsedParam) {
-                                $parsedParam = $apiDocAnnotations['apiParam']->parse($parsedParam);
+                                $parsedParam = $this->parserApiParam->parse($parsedParam);
 
                                 $param = [
                                     'name' => $parsedParam['name'],
                                     'type' => strtolower($parsedParam['type']),
-                                    //'description' => $parsedParam['description'],
                                     "in" => 'query',
-                                    'required' => (boolean)preg_match('/^\[.*\]$/', $parsedParam['name'])
                                 ];
+
+                                if (!preg_match('/^\[.*\]$/', $parsedParam['name'])) {
+                                    $requiredFields[] = $parsedParam['name'];
+                                }
+
                                 switch ($param['type']) {
                                     case 'decimal':
                                     case 'float':
@@ -264,58 +364,19 @@ class GenerateCommand extends Command
                                         $param['format'] = 'byte';
                                         break;
                                 }
+
+                                if (!empty($parsedParam['allowed_values'])) {
+                                    $param['enum'] = explode(',', $parsedParam['allowed_values']);
+                                }
+
+                                if (!empty($parsedParam['description'])) {
+                                    $param['description'] = $parsedParam['description'];
+                                }
+
                                 $parameters[] = $param;
                             }
                         } else {
-
-                            $params = [
-                                'name' => 'body',
-                                'in' => 'body',
-                                'required' => true,
-                                'schema' => [
-                                    'type' => 'object',
-                                    'properties' => [],
-                                ],
-                            ];
-                            foreach ($method->getAnnotation('apiParam') as $parsedParam) {
-                                $parsedParam = $apiDocAnnotations['apiParam']->parse($parsedParam);
-                                $param = [
-                                    'type' => strtolower($parsedParam['type']),
-                                    //'description' => $parsedParam['description'],
-                                    'required' => true
-                                ];
-                                switch ($param['type']) {
-                                    case 'decimal':
-                                    case 'float':
-                                        $param['type'] = 'number';
-                                        $param['format'] = 'float';
-                                        break;
-                                    case 'double':
-                                        $param['type'] = 'number';
-                                        $param['format'] = 'float';
-                                        break;
-                                    case 'timestamp':
-                                        $param['type'] = 'integer';
-                                        break;
-                                    case 'date':
-                                        $param['type'] = 'string';
-                                        $param['format'] = 'date';
-                                        break;
-                                    case 'datetime':
-                                        $param['type'] = 'string';
-                                        $param['format'] = 'date-time';
-                                        break;
-                                    case 'text':
-                                        $param['type'] = 'string';
-                                        break;
-                                    case 'binary':
-                                        $param['type'] = 'string';
-                                        $param['format'] = 'byte';
-                                        break;
-                                }
-                                $params['schema']['properties'][$parsedParam['name']] = $param;
-                            }
-                            $parameters[] = $params;
+                            $parameters[] = $this->buildParams($method->getAnnotation('apiParam'));
                         }
                     }
 
@@ -328,7 +389,7 @@ class GenerateCommand extends Command
 
                     if ($method->hasAnnotation('apiSuccess')) {
                         foreach ($method->getAnnotation('apiSuccess') as $parsedParam) {
-                            $parsedParam = $apiDocAnnotations['apiSuccess']->parse($parsedParam);
+                            $parsedParam = $this->parserApiSuccess->parse($parsedParam);
                             if (empty($parsedParam['group'])) {
                                 $parsedParam['group'] = '200';
                             }
@@ -366,7 +427,6 @@ class GenerateCommand extends Command
                                         }
                                         $properties[$parsedParam['group']][$parsedParam['name']]['type'] = $parsedParam['type'];
                                     }
-
                                     if (!empty($parsedParam['description'])) {
                                         $properties[$parsedParam['group']][$parsedParam['name']]['description'] = $parsedParam['description'];
                                     }
@@ -377,7 +437,7 @@ class GenerateCommand extends Command
 
                     if ($method->hasAnnotation('apiError')) {
                         foreach ($method->getAnnotation('apiError') as $parsedParam) {
-                            $parsedParam = $apiDocAnnotations['apiError']->parse($parsedParam);
+                            $parsedParam = $this->parserApiError->parse($parsedParam);
                             if (!isset($properties[$parsedParam['type']])) {
                                 $properties[$parsedParam['type']] = [];
                             }
@@ -394,16 +454,13 @@ class GenerateCommand extends Command
 
                     foreach ($properties as $name => $fields) {
                         if ($name != 204) {
-                            if ($apiMethod === 'get') {
-
-                            }
                             $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name] = [
                                 //'type' => 'Response ' . $name, // @TODO get real type
                                 'schema' => [
                                     "type" => "object",
                                     'properties' => [],
                                 ],
-                                'description' => 'todo', //@TODO
+                                'description' => '', //@TODO
                             ];
 
                             foreach ($fields as $fieldName => $field) {
@@ -413,12 +470,11 @@ class GenerateCommand extends Command
                              $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name] = $fields;
                         }
                     }
-
                     // Read tag
                     if ($method->hasAnnotation('apiGroup')) {
                         $extractApiData['paths'][$apiPath][$apiMethod]['tags'] = [];
                         foreach ($method->getAnnotation('apiGroup') as $toParse) {
-                            $parsedAnnotation = $apiDocAnnotations['apiGroup']->parse($toParse);
+                            $parsedAnnotation = $this->parserApiGroup->parse($toParse);
                             $extractApiData['paths'][$apiPath][$apiMethod]['tags'][] = $parsedAnnotation['name'];
                         }
                     }
@@ -426,7 +482,8 @@ class GenerateCommand extends Command
             }
         }
 
-        file_put_contents('./swagger.json', json_encode($extractApiData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+        $this->io->writeln('<info>Write in file "' . $this->destinationFileName . '"</info>');
+        file_put_contents($this->destinationFileName, json_encode($extractApiData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
         /*
             API DOC ANNOATIONS:
             @api {method} path [title]
@@ -464,5 +521,77 @@ class GenerateCommand extends Command
                         $stats['functions']
                     ));
         */
+    }
+
+    protected function buildParams(array $parsedParams) {
+            $params = [
+                'name' => 'body',
+                'in' => 'body',
+                'required' => true,
+                'schema' => [
+                    'type' => 'object',
+                    'properties' => [],
+                ],
+            ];
+
+            $requiredFields = [];
+
+            foreach ($parsedParams as $parsedParam) {
+                $parsedParam = $this->parserApiParam->parse($parsedParam);
+                $param = [
+                    'type' => strtolower($parsedParam['type'])
+                ];
+
+                if (!preg_match('/^\[.*\]$/', $parsedParam['name'])) {
+                    $requiredFields[] = $parsedParam['name'];
+                }
+
+
+                switch ($param['type']) {
+                    case 'decimal':
+                    case 'float':
+                        $param['type'] = 'number';
+                        $param['format'] = 'float';
+                        break;
+                    case 'double':
+                        $param['type'] = 'number';
+                        $param['format'] = 'float';
+                        break;
+                    case 'timestamp':
+                        $param['type'] = 'integer';
+                        break;
+                    case 'date':
+                        $param['type'] = 'string';
+                        $param['format'] = 'date';
+                        break;
+                    case 'datetime':
+                        $param['type'] = 'string';
+                        $param['format'] = 'date-time';
+                        break;
+                    case 'text':
+                        $param['type'] = 'string';
+                        break;
+                    case 'binary':
+                        $param['type'] = 'string';
+                        $param['format'] = 'byte';
+                        break;
+                }
+
+                if (!empty($parsedParam['allowed_values'])) {
+                    $param['enum'] = explode(',', $parsedParam['allowed_values']);
+                }
+
+                if (!empty($parsedParam['description'])) {
+                    $param['description'] = $parsedParam['description'];
+                }
+
+                $params['schema']['properties'][$parsedParam['name']] = $param;
+            }
+
+            if (!empty($requiredFields)) {
+                $params['schema']['required'] = $requiredFields;
+            }
+
+            return $params;
     }
 }
