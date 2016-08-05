@@ -435,22 +435,6 @@ class GenerateCommand extends Command
                         }
                     }
 
-                    if ($method->hasAnnotation('apiError')) {
-                        foreach ($method->getAnnotation('apiError') as $parsedParam) {
-                            $parsedParam = $this->parserApiError->parse($parsedParam);
-                            if (!isset($properties[$parsedParam['type']])) {
-                                $properties[$parsedParam['type']] = [];
-                            }
-                            $properties[$parsedParam['type']] = [
-                                "code" => [
-                                    "type" => "integer",
-                                ],
-                                "message" => [
-                                    "type" => "string",
-                                ],
-                            ];
-                        }
-                    }
 
                     foreach ($properties as $name => $fields) {
                         if ($name != 204) {
@@ -468,6 +452,18 @@ class GenerateCommand extends Command
                             }
                         } else {
                              $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name] = $fields;
+                        }
+                    }
+
+
+                    if ($method->hasAnnotation('apiError')) {
+                        foreach ($method->getAnnotation('apiError') as $parsedParam) {
+                            $parsedParam = $this->parserApiError->parse($parsedParam);
+                            $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$parsedParam['type']] = [];
+
+                            if (!empty($parsedParam['description'])) {
+                                $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$parsedParam['type']]['description'] = $parsedParam['description'];
+                            }
                         }
                     }
                     // Read tag
