@@ -143,16 +143,23 @@ class GenerateCommand extends Command
              ->addOption(
                  'host',
                  null,
-                 InputOption::VALUE_OPTIONAL,
+                 InputOption::VALUE_REQUIRED,
                  'API host.',
                  'localhost'
              )
              ->addOption(
                  'base-path',
                  null,
-                 InputOption::VALUE_OPTIONAL,
+                 InputOption::VALUE_REQUIRED,
                  'API base path.',
                  '/'
+             )
+
+             ->addOption(
+                 'minified',
+                 'm',
+                 InputOption::VALUE_NONE,
+                 'Minfiied format.'
              );
     }
 
@@ -194,6 +201,11 @@ class GenerateCommand extends Command
         $this->io = $output;
         $this->destinationFileName = $input->getOption('destination');
         $this->sources = $input->getOption('source');
+        $this->jsonOptions = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+        if (!$input->getOption('minified')) {
+            $this->jsonOptions = $this->jsonOptions | JSON_PRETTY_PRINT;
+        }
+
         $this->initParsers();
         try {
             $this->scanAndParse(
@@ -296,12 +308,17 @@ class GenerateCommand extends Command
                             ];
                         }
                     }
+
+
                     if (!isset($extractApiData['paths'][$apiPath])) {
                         $extractApiData['paths'][$apiPath] = [];
                     }
-
-
                     $extractApiData['paths'][$apiPath][$apiMethod] = [];
+
+                    if (!empty($parsedAnnotation['title'])) {
+                        $extractApiData['paths'][$apiPath][$apiMethod]['summary'] = $parsedAnnotation['title'];
+                    }
+
 
                     //ApiName
                     if ($method->hasAnnotation('apiName')) {
@@ -331,7 +348,7 @@ class GenerateCommand extends Command
                                     "in" => 'query',
                                 ];
 
-                                if (!preg_match('/^\[.*\]$/', $parsedParam['name'])) {
+                                if (!preg_match('/^\[.*\]$/', trim($parsedParam[5]))) {
                                     $requiredFields[] = $parsedParam['name'];
                                 }
 
@@ -376,7 +393,12 @@ class GenerateCommand extends Command
                                 $parameters[] = $param;
                             }
                         } else {
-                            $parameters[] = $this->buildParams($method->getAnnotation('apiParam'));
+                            $param = $this->buildSchema($method->getAnnotation('apiParam'));
+                            $param['name'] = 'body';
+                            $param['in'] = 'body';
+                            $param['required'] = true;
+                            $parameters[] = $param;
+
                         }
                     }
 
@@ -405,18 +427,22 @@ class GenerateCommand extends Command
                                             case 'decimal':
                                             case 'float':
                                                 $parsedParam['type'] = 'number';
+                                                $properties[$parsedParam['group']][$parsedParam['name']]['format'] = 'float';
                                                 break;
                                             case 'double':
                                                 $parsedParam['type'] = 'number';
+                                                $properties[$parsedParam['group']][$parsedParam['name']]['format'] = 'float';
                                                 break;
                                             case 'timestamp':
                                                 $parsedParam['type'] = 'integer';
                                                 break;
                                             case 'date':
                                                 $parsedParam['type'] = 'string';
+                                                $properties[$parsedParam['group']][$parsedParam['name']]['format'] = 'date';
                                                 break;
                                             case 'datetime':
                                                 $parsedParam['type'] = 'string';
+                                                $properties[$parsedParam['group']][$parsedParam['name']]['format'] = 'date-time';
                                                 break;
                                             case 'text':
                                                 $parsedParam['type'] = 'string';
@@ -435,7 +461,6 @@ class GenerateCommand extends Command
                         }
                     }
 
-
                     foreach ($properties as $name => $fields) {
                         if ($name != 204) {
                             $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name] = [
@@ -452,6 +477,69 @@ class GenerateCommand extends Command
                             }
                         } else {
                              $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name] = $fields;
+                        }
+                    }
+
+
+                    $headers = [];
+                    if ($method->hasAnnotation('apiHeader')) {
+                        foreach ($method->getAnnotation('apiHeader') as $parsedParam) {
+                            $parsedParam = $this->parserApiSuccess->parse($parsedParam);
+                            if (empty($parsedParam['group'])) {
+                                $parsedParam['group'] = '200';
+                            }
+                            if (!isset($headers[$parsedParam['group']])) {
+                                $headers[$parsedParam['group']] = [];
+                            }
+
+                            if (!empty($parsedParam['name'])) {
+                                if (!empty($parsedParam['type'])) {
+                                    $headers[$parsedParam['group']][$parsedParam['name']]['type'] = $parsedParam['type'];
+                                    switch ($parsedParam['type']) {
+                                        case 'decimal':
+                                        case 'float':
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['type'] = 'number';
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['format'] = 'float';
+                                            break;
+                                        case 'double':
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['type'] = 'number';
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['format'] = 'float';
+                                            break;
+                                        case 'timestamp':
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['type'] = 'integer';
+                                            break;
+                                        case 'date':
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['type'] = 'string';
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['format'] = 'date';
+                                            break;
+                                        case 'datetime':
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['type'] = 'string';
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['format'] = 'date-time';
+                                            break;
+                                        case 'text':
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['type'] = 'string';
+                                            break;
+                                        case 'binary':
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['type'] = 'string';
+                                            $headers[$parsedParam['group']][$parsedParam['name']]['format'] = 'byte';
+                                            break;
+                                    }
+
+                                    if (!empty($parsedParam['allowed_values'])) {
+                                        $headers[$parsedParam['group']][$parsedParam['name']]['enum'] = explode(',', $parsedParam['allowed_values']);
+                                    }
+                                }
+                                if (!empty($parsedParam['description'])) {
+                                    $headers[$parsedParam['group']][$parsedParam['name']]['description'] = $parsedParam['description'];
+                                }
+                            }
+                        }
+                    }
+
+                    foreach ($headers as $name => $fields) {
+                        $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name]['headers'] = [];
+                        foreach ($fields as $fieldName => $field) {
+                            $extractApiData['paths'][$apiPath][$apiMethod]["responses"][$name]['headers'][$fieldName] = $field;
                         }
                     }
 
@@ -479,7 +567,7 @@ class GenerateCommand extends Command
         }
 
         $this->io->writeln('<info>Write in file "' . $this->destinationFileName . '"</info>');
-        file_put_contents($this->destinationFileName, json_encode($extractApiData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+        file_put_contents($this->destinationFileName, json_encode($extractApiData, $this->jsonOptions));
         /*
             API DOC ANNOATIONS:
             @api {method} path [title]
@@ -519,11 +607,8 @@ class GenerateCommand extends Command
         */
     }
 
-    protected function buildParams(array $parsedParams) {
+    protected function buildSchema(array $parsedParams) {
             $params = [
-                'name' => 'body',
-                'in' => 'body',
-                'required' => true,
                 'schema' => [
                     'type' => 'object',
                     'properties' => [],
@@ -538,7 +623,7 @@ class GenerateCommand extends Command
                     'type' => strtolower($parsedParam['type'])
                 ];
 
-                if (!preg_match('/^\[.*\]$/', $parsedParam['name'])) {
+                if (!preg_match('/^\[.*\]$/', trim($parsedParam[5]))) {
                     $requiredFields[] = $parsedParam['name'];
                 }
 
