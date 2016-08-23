@@ -23,7 +23,16 @@ class Finder
         $fileMasks = $this->turnExtensionsToMask($extensions);
         $files = [];
         foreach ($sources as $source) {
-            $files = \array_merge($files, $this->getFilesFromSource($source, $exclude, $fileMasks));
+            $return = $this->getFilesFromSource($source, $exclude, $fileMasks);
+            foreach ($return as $path => $values) {
+                foreach ($exclude as $exc) {
+                    if (\preg_match('/.*' . preg_quote($exc, '/') . '.*/', $path) !== 0) {
+                        unset($return[$path]);
+                        break;
+                    }
+                }
+            }
+            $files = \array_merge($files, $return);
         }
         return $files;
     }

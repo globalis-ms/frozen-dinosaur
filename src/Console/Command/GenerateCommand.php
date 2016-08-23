@@ -262,7 +262,6 @@ class GenerateCommand extends Command
      */
     private function scanAndParse(array $exclude, array $extensions, $host, $base_path, $title)
     {
-
         $this->io->writeln('<info>Scanning sources and parsing</info>');
         $files = $this->finder()->find($this->sources, $exclude, $extensions);
         $this->parser()->parse($files);
@@ -294,6 +293,8 @@ class GenerateCommand extends Command
                     $properties = [];
                     $parameters = [];
 
+                    $reBuild = [];
+
                     $toParse = $method->getAnnotation('api')[0];
                     $parsedAnnotation = $this->parserApi->parse($toParse);
                     $apiMethod = $parsedAnnotation['method'];
@@ -309,6 +310,18 @@ class GenerateCommand extends Command
                         }
                     }
 
+                    if (preg_match_all('/\[(?<params>[^\}]+)\]/',$apiPath, $matches) && !empty($matches['params'])) {
+                        foreach ($matches['params'] as $param) {
+                            $parameters[] = [
+                                'name' => $param,
+                                'type' => 'string',
+                                "in" => 'path',
+                                'required' => true
+                            ];
+                            $apiPath = str_replace('['.$param.']', '{'.$param.'}', $apiPath);
+                            $reBuild[] = $param;
+                        }
+                    }
 
                     if (!isset($extractApiData['paths'][$apiPath])) {
                         $extractApiData['paths'][$apiPath] = [];
@@ -562,49 +575,27 @@ class GenerateCommand extends Command
                             $extractApiData['paths'][$apiPath][$apiMethod]['tags'][] = $parsedAnnotation['name'];
                         }
                     }
+
+                    //Rebuild for optionnal get
+                    foreach (array_reverse($reBuild) as $optionnalParam) {
+                        $newApiPath = preg_replace('/\/\{'.preg_quote($optionnalParam, '/').'}.*/', '', $apiPath);
+                        if (!isset($extractApiData['paths'][$newApiPath])) {
+                            $extractApiData['paths'][$newApiPath] = [];
+                        }
+                        $extractApiData['paths'][$newApiPath][$apiMethod] = $extractApiData['paths'][$apiPath][$apiMethod];
+                        // Delete param
+                        foreach($extractApiData['paths'][$newApiPath][$apiMethod]["parameters"] as $key => $params) {
+                            if ($params['in'] === 'path' && $params['name'] === $optionnalParam) {
+                                unset($extractApiData['paths'][$newApiPath][$apiMethod]["parameters"][$key]);
+                            }
+                        }
+                    }
                 }
             }
         }
 
         $this->io->writeln('<info>Write in file "' . $this->destinationFileName . '"</info>');
         file_put_contents($this->destinationFileName, json_encode($extractApiData, $this->jsonOptions));
-        /*
-            API DOC ANNOATIONS:
-            @api {method} path [title]
-            @apiDefine name [title]
-                                 [description]
-            @apiDescription text
-            @apiError [(group)] [{type}] field [description]
-            @apiErrorExample [{type}] [title]
-                             example
-            @apiExample [{type}] title
-                     example
-            @apiGroup name
-            @apiHeader [(group)] [{type}] [field=defaultValue] [description]
-            @apiHeaderExample [{type}] [title]
-                               example
-            @apiIgnore [hint] //Ignore api
-            @apiName name
-            @apiParam [(group)] [{type}] [field=defaultValue] [description]
-            @apiParamExample [{type}] [title]
-                               example
-            @apiPermission name
-            @apiSampleRequest url
-            @apiSuccess [(group)] [{type}] field [description]
-            @apiSuccessExample [{type}] [title]
-                               example
-            @apiUse name
-            @apiVersion version
-            $this->parser()->parse($files);
-                        $this->reportParserErrors($this->parser->getErrors());
-                        $stats = $this->parserResult->getDocumentedStats();
-                        $this->io->writeln(sprintf(
-                        'Found <comment>%d classes</comment>, <comment>%d constants</comment> and <comment>%d functions</comment>',
-                        $stats['classes'],
-                        $stats['constants'],
-                        $stats['functions']
-                    ));
-        */
     }
 
     protected function buildSchema(array $parsedParams) {
