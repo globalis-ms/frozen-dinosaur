@@ -16,5 +16,4 @@ class ApiName extends ApiDoc
      * @var string
      */
     protected $regExp = '/^(?<name>.*)$/';
-
 }

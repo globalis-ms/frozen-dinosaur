@@ -310,7 +310,7 @@ class GenerateCommand extends Command
                         }
                     }
 
-                    if (preg_match_all('/\[(?<params>[^\}]+)\]/',$apiPath, $matches) && !empty($matches['params'])) {
+                    if (preg_match_all('/\[(?<params>[^\}]+)\]/', $apiPath, $matches) && !empty($matches['params'])) {
                         foreach ($matches['params'] as $param) {
                             $parameters[] = [
                                 'name' => $param,
@@ -411,7 +411,6 @@ class GenerateCommand extends Command
                             $param['in'] = 'body';
                             $param['required'] = true;
                             $parameters[] = $param;
-
                         }
                     }
 
@@ -572,7 +571,7 @@ class GenerateCommand extends Command
                         $extractApiData['paths'][$apiPath][$apiMethod]['tags'] = [];
                         foreach ($method->getAnnotation('apiGroup') as $toParse) {
                             $parsedAnnotation = $this->parserApiGroup->parse($toParse);
-                            $extractApiData['paths'][$apiPath][$apiMethod]['tags'][] = $parsedAnnotation['name'];
+                            $extractApiData['paths'][$apiPath][$apiMethod]['tags'][] = ucfirst($parsedAnnotation['name']);
                         }
                     }
 
@@ -584,7 +583,7 @@ class GenerateCommand extends Command
                         }
                         $extractApiData['paths'][$newApiPath][$apiMethod] = $extractApiData['paths'][$apiPath][$apiMethod];
                         // Delete param
-                        foreach($extractApiData['paths'][$newApiPath][$apiMethod]["parameters"] as $key => $params) {
+                        foreach ($extractApiData['paths'][$newApiPath][$apiMethod]["parameters"] as $key => $params) {
                             if ($params['in'] === 'path' && $params['name'] === $optionnalParam) {
                                 unset($extractApiData['paths'][$newApiPath][$apiMethod]["parameters"][$key]);
                             }
@@ -598,7 +597,8 @@ class GenerateCommand extends Command
         file_put_contents($this->destinationFileName, json_encode($extractApiData, $this->jsonOptions));
     }
 
-    protected function buildSchema(array $parsedParams) {
+    protected function buildSchema(array $parsedParams)
+    {
             $params = [
                 'schema' => [
                     'type' => 'object',
