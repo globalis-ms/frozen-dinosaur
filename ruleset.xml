@@ -3,65 +3,19 @@
  <description>FrozenDinosaur coding standard</description>
 
  <exclude-pattern>\.git</exclude-pattern>
+ <rule ref="./vendor/cakephp/cakephp-codesniffer/CakePHP"/>
 
- <rule ref="PSR2"/>
-
- <!--
- Temporarily ignore until API docblock formatting and line length issues in core code are fixed.
- -->
-
- <rule ref="Squiz.Arrays.ArrayBracketSpacing"/>
- <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
-
- <rule ref="Squiz.Classes.LowercaseClassKeywords"/>
-
- <rule ref="Generic.CodeAnalysis.ForLoopShouldBeWhileLoop"/>
- <rule ref="Generic.CodeAnalysis.ForLoopWithTestFunctionCall"/>
- <rule ref="Generic.CodeAnalysis.JumbledIncrementer"/>
- <rule ref="Generic.CodeAnalysis.UnconditionalIfStatement"/>
- <rule ref="Generic.CodeAnalysis.UnnecessaryFinalModifier"/>
-
- <rule ref="Generic.Commenting.Todo"/>
- <rule ref="Squiz.Commenting.ClassComment"/>
- <rule ref="Squiz.Commenting.FunctionComment"/>
- <rule ref="Squiz.Commenting.FunctionCommentThrowTag"/>
- <rule ref="Squiz.Commenting.VariableComment"/>
- <rule ref="Squiz.Commenting.BlockComment" />
- <rule ref="Squiz.Commenting.DocCommentAlignment" />
- <rule ref="Squiz.Commenting.EmptyCatchComment" />
- <rule ref="Squiz.Commenting.InlineComment" />
- <rule ref="Squiz.Commenting.LongConditionClosingComment" />
- <rule ref="Squiz.Commenting.PostStatementComment" />
-
- <rule ref="PEAR.ControlStructures.ControlSignature"/>
-
- <rule ref="Generic.Files.LineEndings"/>
-
- <rule ref="Generic.Formatting.NoSpaceAfterCast"/>
-
- <rule ref="Squiz.Operators.ValidLogicalOperators"/>
-
- <rule ref="Generic.PHP.DeprecatedFunctions"/>
- <rule ref="Squiz.PHP.DisallowSizeFunctionsInLoops"/>
- <rule ref="Squiz.PHP.Eval"/>
- <rule ref="Generic.PHP.ForbiddenFunctions"/>
- <rule ref="Squiz.PHP.NonExecutableCode"/>
- <rule ref="Generic.PHP.NoSilencedErrors"/>
-
- <rule ref="Squiz.Scope.MemberVarScope"/>
- <rule ref="Squiz.Scope.StaticThisUsage"/>
-
- <rule ref="Squiz.WhiteSpace.CastSpacing"/>
- <rule ref="Squiz.WhiteSpace.LanguageConstructSpacing"/>
- <rule ref="Squiz.WhiteSpace.LogicalOperatorSpacing"/>
- <rule ref="Squiz.WhiteSpace.SemicolonSpacing"/>
- <rule ref="Squiz.WhiteSpace.SuperfluousWhitespace"/>
- <rule ref="Squiz.WhiteSpace.ScopeClosingBrace"/>
-
- <!-- Relax some install.php and tests/* rules -->
- <!--
- <rule ref="PSR1.Files.SideEffects">
-  <exclude-pattern>install.php</exclude-pattern>
+ <!-- Use PSR2 Naming Conventions -->
+ <rule ref="CakePHP.NamingConventions.ValidFunctionName">
+  <exclude-pattern>*</exclude-pattern>
  </rule>
--->
+ <rule ref="PSR2.Classes.PropertyDeclaration.Underscore">
+  <severity>5</severity>
+ </rule>
+ <rule ref="PSR2.Methods.MethodDeclaration.Underscore">
+  <severity>5</severity>
+ </rule>
+ <rule ref="Squiz.NamingConventions.ValidFunctionName" />
+ <rule ref="Generic.NamingConventions.CamelCapsFunctionName" />
+ <rule ref="PEAR.NamingConventions.ValidFunctionName" />
 </ruleset>
