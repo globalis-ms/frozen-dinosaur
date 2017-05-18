@@ -1,7 +1,8 @@
 {
     "name": "globalis/frozendinosaur",
     "description": "PHP Rest API tets and doc generator",
-     "authors": [
+    "bin":["robo"],
+    "authors": [
          {
              "name": "Romain GUGERT",
              "email": "romain.gugert@globalis-ms.com"
